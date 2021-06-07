@@ -1,61 +1,51 @@
 # This file contains the configuration of disks and storage
-{ ... }:
+{ config, ... }:
+
+let
+  rootPool = mkUuid "1700c195-e991-4c08-9055-5d0403fb1cc6"; # Device to mount the main btrfs pool from
+
+  # TODO put in custom lib
+  mkUuid = uuid: "/dev/disk/by-uuid/${uuid}";
+  mkMount = subvol: {
+    device = rootPool;
+    fsType = "btrfs";
+    options = [ "compress-force=zstd:1" "subvol=${subvol}" ];
+  };
+in
+
 {
   boot.loader.grub.devices = [ "nodev" ];
   boot.loader.grub.efiInstallAsRemovable = true;
   boot.loader.grub.efiSupport = true;
   boot.loader.grub.useOSProber = true;
 
+  # TODO refactor into custom.luksPools
   boot.initrd.luks.devices = {
-    CT1000MX500-crypt = {
-      device = "/dev/disk/by-uuid/37473d86-55d3-4101-a7d7-16474d8a176d";
+    TR200_18PB71KWK3QS-crypt = {
+      device = mkUuid "642a307a-9b37-414b-b53b-045eeb277d72";
       allowDiscards = true;
     };
   };
 
-  custom.zfs.enable = true;
-  boot.zfs.devNodes = "/dev/mapper/";
+  fileSystems = {
+    "/tmp" = {
+      device = "tmpfs";
+      fsType = "tmpfs";
+      options = [ "size=50%" "nosuid" "nodev" "nodev" "mode=1777" ]; # systemd default security options
+    };
+    "/boot" = {
+      device = mkUuid "B422-5366";
+      fsType = "vfat";
+      options = [ "umask=077" ];
+    };
 
-  # Instance-specific
-  fileSystems."/" = {
-    device = "Hpool/instance/root";
-    fsType = "zfs";
-  };
-  fileSystems."/tmp" = {
-    device = "tmpfs";
-    fsType = "tmpfs";
-    options = [ "size=50%" "nosuid" "nodev" "nodev" "mode=1777" ]; # systemd default security options
-  };
-  # Deployment-specific
-  fileSystems."/boot" = {
-    device = "/dev/disk/by-uuid/479D-9EFF";
-    fsType = "vfat";
-    options = [ "umask=077" ];
-  };
-  fileSystems."/nix" = {
-    device = "Hpool/deployment/nix";
-    fsType = "zfs";
-  };
-  fileSystems."/var/lib/docker" = {
-    device = "Hpool/deployment/docker";
-    fsType = "zfs";
-  };
-  # Purpose-specific
-  fileSystems."/home" = {
-    device = "Hpool/purpose/home";
-    fsType = "zfs";
-  };
-  fileSystems."/var/opt/games" = {
-    device = "Hpool/purpose/games";
-    fsType = "zfs";
-  };
-  fileSystems."/var/lib/libvirt/images/macOS" = {
-    device = "Hpool/purpose/macOS";
-    fsType = "zfs";
+    "/" = mkMount "root";
+    "/nix" = mkMount "nix";
+    "/home" = mkMount "home";
+    "/var/opt/games" = mkMount "games";
   };
 
-  swapDevices = [ ];
-
+  # TODO factor out into custom.zram
   zramSwap = {
     enable = true;
     algorithm = "lz4";
